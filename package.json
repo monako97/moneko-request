@@ -1,7 +1,7 @@
 {
   "name": "@moneko/request",
-  "version": "1.0.0",
-  "description": "",
+  "version": "1.0.1",
+  "description": "request",
   "main": "index.js",
   "scripts": {
     "build": "rm -rf ./lib && tsc"
