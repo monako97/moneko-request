@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "moduleResolution": "Node",
-    "target": "ES6",
+    "target": "ES2017",
     "module": "CommonJS",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
