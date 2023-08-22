@@ -29,10 +29,10 @@ export interface ResponseBlob extends ResponseBody, Blob {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ResponseBody<T = any> {
-  status: number;
-  success: boolean;
-  message: string;
-  result: T;
+  status?: number;
+  success?: boolean;
+  message?: string;
+  result?: T;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,7 +80,7 @@ function responseHeadersToJson(headerString: string) {
 
 const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
 
-export function request<T extends ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
+export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
   return new Promise((res) => {
     const method = opt.method?.toLocaleUpperCase() || 'GET';
     const isFormData: boolean = opt.data instanceof FormData;

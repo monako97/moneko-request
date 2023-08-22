@@ -1,6 +1,6 @@
 {
   "name": "@moneko/request",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "request",
   "main": "index.js",
   "scripts": {
