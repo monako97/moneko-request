@@ -7,5 +7,6 @@ lib
 types
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
 index.js
 index.d.ts
