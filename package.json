@@ -11,7 +11,7 @@
   "license": "ISC",
   "files": ["index.js","index.d.ts"],
   "devDependencies": {
-    "@types/node": "20.12.5",
-    "typescript": "5.4.4"
+    "@types/node": "20.12.7",
+    "typescript": "5.4.5"
   }
 }
