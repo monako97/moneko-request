@@ -13,8 +13,7 @@ export type Method =
 export type RequestOption = {
   responseType?: XMLHttpRequestResponseType;
   method?: Method;
-  // eslint-disable-next-line no-unused-vars
-  onUploadProgress?: (progress: ProgressEvent<XMLHttpRequestEventTarget>) => void;
+  onProgress?(progress: ProgressEvent<XMLHttpRequestEventTarget>): void;
   withCredentials?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: { [key: string]: any } | BodyInit | false | Array<any>;
@@ -48,24 +47,28 @@ export interface ResponsePageData<T = any> extends ResponseBody<T> {
   /** 当前页数据 */
   data: T[];
 }
-
-function getXhr(): XMLHttpRequest {
-  let xhr;
+const getXhr = (function () {
+  let xhrConstructor;
 
   if (window.ActiveXObject) {
     try {
-      xhr = new window.ActiveXObject('Msxml2.XMLHTTP');
-    } catch (e) {
-      xhr = new window.ActiveXObject('Microsoft.XMLHTTP');
+      xhrConstructor = function () {
+        return new window.ActiveXObject('Msxml2.XMLHTTP');
+      };
+      // eslint-disable-next-line no-unused-vars
+    } catch (err) {
+      xhrConstructor = function () {
+        return new window.ActiveXObject('Microsoft.XMLHTTP');
+      };
     }
   } else if (window.XMLHttpRequest) {
-    xhr = new XMLHttpRequest();
+    xhrConstructor = function () {
+      return new XMLHttpRequest();
+    };
   }
-  return xhr;
-}
-
+  return xhrConstructor as () => XMLHttpRequest;
+})();
 const allXhr: Record<string, XMLHttpRequest | null> = {};
-
 function responseHeadersToJson(headerString: string) {
   const headers: Record<string, string> = {};
   const hl = headerString.split('\r\n');
@@ -77,14 +80,75 @@ function responseHeadersToJson(headerString: string) {
   }
   return headers;
 }
+const ContentDispositionRegExp = /;filename=(.*)$/;
+const HttpRegExp = /^(http(s|):\/\/)|^(\/\/)/;
+interface Response {
+  __xhr__?: XMLHttpRequest;
+  __headers__?: Record<string, string>;
+}
+function extraResp(resp: any, xhr: XMLHttpRequest) {
+  // 创建一个新的原型对象，并在其上定义 `__xhr__` 和 `__headers__`
+  const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
+  const headers = responseHeadersToJson(xhr.getAllResponseHeaders());
+  const contentDisposition = headers['content-disposition'];
 
+  // filename
+  if (contentDisposition && Object.prototype.toString.call(xhr.response) === '[object Blob]') {
+    const disposition = ContentDispositionRegExp.exec(contentDisposition);
+
+    if (disposition) {
+      resp.filename = disposition[1];
+    }
+  }
+  Object.defineProperty(protoWithExtras, '__xhr__', {
+    value: xhr,
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+  Object.defineProperty(protoWithExtras, '__headers__', {
+    value: headers,
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+  // 将 `resp` 的原型指向带有额外属性的 `protoWithExtras`
+  Object.setPrototypeOf(resp, protoWithExtras);
+  return resp;
+}
+function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T & Response) => void) {
+  if (xhr.readyState === xhr.DONE) {
+    if (request.prototype.interceptors?.response) {
+      request.prototype.interceptors.response(xhr.response);
+    }
+    if (opt.abortId && Object.prototype.hasOwnProperty.call(allXhr, opt.abortId)) {
+      allXhr[opt.abortId] = null;
+      delete allXhr[opt.abortId];
+    }
+    if (xhr.response) {
+      return reslove(extraResp(xhr.response, xhr));
+    }
+    return extraResp(
+      {
+        status: xhr.status,
+        message: xhr.statusText,
+        success: false,
+      } as unknown as T & Response,
+      xhr,
+    );
+  }
+}
 const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
 
-export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
-  return new Promise((res) => {
+export function request<T = ResponseBody>(
+  url: string,
+  opt: RequestOption = {},
+): Promise<T & Response> {
+  return new Promise((reslove) => {
+    const interceptors = request.prototype.interceptors;
     const method = opt.method?.toLocaleUpperCase() || 'GET';
     const isFormData: boolean = opt.data instanceof FormData;
-    const prefix = /^(http(s|):\/\/)|^(\/\/)/.test(url) ? '' : request.prototype.prefixUrl || '';
+    const prefix = HttpRegExp.test(url) ? '' : request.prototype.prefixUrl || '';
     let uri = url;
 
     opt.headers = {
@@ -92,14 +156,12 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
       'X-Requested-With': 'XMLHttpRequest',
       ...opt.headers,
     };
-
     const xhr = getXhr();
 
     xhr.responseType = opt.responseType || 'json';
-
     if (xhr.readyState === xhr.UNSENT) {
-      if (request.prototype.interceptors?.request) {
-        const nopt = request.prototype.interceptors?.request({
+      if (interceptors?.request) {
+        const nopt = interceptors.request({
           url,
           ...opt,
         });
@@ -121,55 +183,11 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
       uri = url + '?' + params.toString();
     }
     xhr.addEventListener('readystatechange', function () {
-      /**
-       * XMLHttpRequest对象
-       * 0：还没有完成初始化
-       * 1：载入，开始发送请求
-       * 2：载入完成，请求发送完成
-       * 3：解析，开始读取服务器的响应
-       * 4：完成，读取服务器响应结束
-       */
-      if (xhr.readyState === xhr.DONE) {
-        if (request.prototype.interceptors?.response) {
-          request.prototype.interceptors?.response(xhr.response);
-        }
-        if (opt.abortId && Object.prototype.hasOwnProperty.call(allXhr, opt.abortId)) {
-          allXhr[opt.abortId] = null;
-          delete allXhr[opt.abortId];
-        }
-
-        if (xhr.response) {
-          const headers = responseHeadersToJson(xhr.getAllResponseHeaders());
-          const disposition = /;filename=(.*)$/.exec(headers['content-disposition']);
-
-          if (Object.prototype.toString.call(xhr.response) === '[object Blob]') {
-            // filename
-            xhr.response.filename = disposition ? disposition[1] : null;
-            return res(xhr.response);
-          }
-          const resp = Object.create(
-            {
-              getResponseHeader: (name: string) => xhr.getResponseHeader(name),
-              getAllResponseHeaders: () => xhr.getAllResponseHeaders(),
-              response: xhr.response,
-              headers: headers,
-            },
-            Object.getOwnPropertyDescriptors(xhr.response)
-          );
-
-          return res(resp);
-        }
-        return res({
-          status: xhr.status,
-          message: xhr.statusText,
-          success: false,
-        } as unknown as T);
-      }
+      onDone(xhr, opt, reslove);
     });
-    if (opt.onUploadProgress) {
-      xhr.addEventListener('progress', opt.onUploadProgress);
+    if (opt.onProgress) {
+      xhr.addEventListener('progress', opt.onProgress);
     }
-
     xhr.open(method || 'GET', prefix + uri);
     if (opt.withCredentials) {
       xhr.withCredentials = true;
@@ -189,15 +207,13 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
   });
 }
 
-export const cancelRequest = (abortId: string) => {
+export function cancelRequest(abortId: string) {
   if (Object.prototype.hasOwnProperty.call(allXhr, abortId)) {
     allXhr[abortId]?.abort();
-
     allXhr[abortId] = null;
     delete allXhr[abortId];
   }
-};
-
+}
 export type InterceptorRequestType = RequestOption & {
   url: string;
 };
@@ -205,7 +221,7 @@ export type InterceptorRequestType = RequestOption & {
 export type InterceptorType = {
   /** 请求拦截器 */
   // eslint-disable-next-line no-unused-vars
-  request?: (option: InterceptorRequestType) => RequestOption;
+  request?: (option: InterceptorRequestType) => (RequestOption | void);
   /** 响应拦截器 */
   // eslint-disable-next-line no-unused-vars
   response?: (response: XMLHttpRequest['response']) => void;
@@ -213,14 +229,15 @@ export type InterceptorType = {
 
 export type RequestExtendType = {
   /**
-   * 配置请求拦截器
+   * 配置拦截器
    **/
   interceptor?: InterceptorType;
   /** 请求前缀 */
   prefixUrl?: string;
 };
 
-export const extend = (opt: RequestExtendType) => {
+export function extend(opt: RequestExtendType) {
   request.prototype.interceptors = opt.interceptor;
   request.prototype.prefixUrl = opt.prefixUrl;
+  return request;
 };

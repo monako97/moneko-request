@@ -7,7 +7,7 @@
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "declaration": true,
-    "emitDeclarationOnly": false,
-    "removeComments": false, 
+    "emitDeclarationOnly": true,
+    "removeComments": false,
   }
 }
