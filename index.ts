@@ -14,6 +14,7 @@ export type RequestOption = {
   responseType?: XMLHttpRequestResponseType;
   method?: Method;
   onProgress?(progress: ProgressEvent<XMLHttpRequestEventTarget>): void;
+  onAbort?(e: ProgressEvent<XMLHttpRequestEventTarget>): void;
   withCredentials?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: { [key: string]: any } | BodyInit | false | Array<any>;
@@ -187,6 +188,10 @@ export function request<T = ResponseBody>(
     });
     if (opt.onProgress) {
       xhr.addEventListener('progress', opt.onProgress);
+    }
+
+    if (opt.onAbort) {
+      xhr.addEventListener('abort', opt.onAbort);
     }
     xhr.open(method || 'GET', prefix + uri);
     if (opt.withCredentials) {
