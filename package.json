@@ -1,6 +1,6 @@
 {
   "name": "@moneko/request",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "request",
   "main": "index.js",
   "scripts": {
@@ -15,7 +15,7 @@
   ],
   "devDependencies": {
     "@swc/cli": "^0.5.0",
-    "@swc/core": "^1.9.1",
+    "@swc/core": "^1.9.2",
     "typescript": "^5.6.3"
   }
 }
