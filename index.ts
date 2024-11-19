@@ -158,14 +158,14 @@ function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) =
     if (xhr.response) {
       return reslove(extraResp(xhr.response, xhr));
     }
-    return extraResp(
+    return reslove(extraResp(
       {
         status: xhr.status,
         message: xhr.statusText,
         success: false,
       } as unknown as T,
       xhr,
-    );
+    ));
   }
 }
 const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
