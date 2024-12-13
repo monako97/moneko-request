@@ -96,11 +96,12 @@ function extraResp(resp: XMLHttpRequest['response'], xhr: XMLHttpRequest) {
   const contentDisposition = headers['content-disposition'];
 
   // filename
-  if (contentDisposition && Object.prototype.toString.call(xhr.response) === '[object Blob]') {
-    const disposition = ContentDispositionRegExp.exec(contentDisposition);
+  if (xhr.responseType === 'blob' && contentDisposition) {
+    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+    const filename = matches && matches[1] ? matches[1].replace(/(^UTF-8|)['"]/g, '') : null;
 
-    if (disposition) {
-      resp.filename = disposition[1];
+    if (filename) {
+      resp.filename = filename;
     }
   }
   Object.defineProperty(protoWithExtras, '__xhr__', {
