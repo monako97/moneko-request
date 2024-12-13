@@ -82,7 +82,7 @@ function responseHeadersToJson(headerString: string) {
   }
   return headers;
 }
-const ContentDispositionRegExp = /;filename=(.*)$/;
+const ContentDispositionRegExp = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
 const HttpRegExp = /^(http(s|):\/\/)|^(\/\/)/;
 
 interface Response {
@@ -90,18 +90,15 @@ interface Response {
   __headers__?: Record<string, string>;
 }
 function extraResp(resp: XMLHttpRequest['response'], xhr: XMLHttpRequest) {
-  // 创建一个新的原型对象，并在其上定义 `__xhr__` 和 `__headers__`
   const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
   const headers = responseHeadersToJson(xhr.getAllResponseHeaders());
   const contentDisposition = headers['content-disposition'];
 
-  // filename
   if (xhr.responseType === 'blob' && contentDisposition) {
-    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
-    const filename = matches && matches[1] ? matches[1].replace(/(^UTF-8|)['"]/g, '') : null;
+    const matches = ContentDispositionRegExp.exec(contentDisposition);
 
-    if (filename) {
-      resp.filename = filename;
+    if (matches && matches[1]) {
+      resp.filename = decodeURIComponent(matches[1]).replace(/(^UTF-8|)['"]/g, '');
     }
   }
   Object.defineProperty(protoWithExtras, '__xhr__', {
@@ -141,16 +138,15 @@ function isHttpSuccess(xhr: XMLHttpRequest): boolean {
 }
 function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) => void) {
   if (xhr.readyState === xhr.DONE) {
+    const interceptors = request.prototype.interceptors;
     // 判断响应是否成功
     const isSuccess = isHttpSuccess(xhr);
 
-    if (request.prototype.interceptors?.response) {
-      request.prototype.interceptors.response(xhr.response, xhr);
+    if (interceptors?.response) {
+      interceptors.response(xhr.response, xhr);
     }
-    if (!isSuccess) {
-      if (request.prototype.interceptors?.httpError) {
-        request.prototype.interceptors.httpError(xhr);
-      }
+    if (!isSuccess && interceptors?.httpError) {
+      interceptors.httpError(xhr);
     }
     if (opt.abortId && Object.prototype.hasOwnProperty.call(allXhr, opt.abortId)) {
       allXhr[opt.abortId] = null;
@@ -159,14 +155,16 @@ function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) =
     if (xhr.response) {
       return reslove(extraResp(xhr.response, xhr));
     }
-    return reslove(extraResp(
-      {
-        status: xhr.status,
-        message: xhr.statusText,
-        success: false,
-      } as unknown as T,
-      xhr,
-    ));
+    return reslove(
+      extraResp(
+        {
+          status: xhr.status,
+          message: xhr.statusText,
+          success: false,
+        } as unknown as T,
+        xhr,
+      ),
+    );
   }
 }
 const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
@@ -182,21 +180,20 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     opt.headers = {
       'Content-Type': 'application/json; charset=utf-8',
       'X-Requested-With': 'XMLHttpRequest',
+      ...((request.prototype.headers as Record<string, string>) || {}),
       ...opt.headers,
     };
     const xhr = getXhr();
 
     xhr.responseType = opt.responseType || 'json';
-    if (xhr.readyState === xhr.UNSENT) {
-      if (interceptors?.request) {
-        const nopt = interceptors.request({
-          url,
-          ...opt,
-        });
+    if (xhr.readyState === xhr.UNSENT && interceptors && interceptors.request) {
+      const nopt = interceptors.request({
+        url,
+        ...opt,
+      });
 
-        if (nopt) {
-          Object.assign(opt, nopt);
-        }
+      if (nopt) {
+        Object.assign(opt, nopt);
       }
     }
     if (isFormData) {
@@ -220,17 +217,16 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
       xhr.addEventListener('abort', opt.onAbort);
     }
     xhr.open(method || 'GET', prefix + uri);
-    if (opt.withCredentials) {
-      xhr.withCredentials = true;
+    if (opt.withCredentials !== void 0) {
+      xhr.withCredentials = opt.withCredentials;
+    } else if (request.prototype.withCredentials !== void 0) {
+      xhr.withCredentials = request.prototype.withCredentials;
     }
-    if (opt.headers) {
-      for (const key in opt.headers) {
-        if (Object.hasOwnProperty.call(opt.headers, key)) {
-          xhr.setRequestHeader(key, opt.headers[key]);
-        }
+    for (const key in opt.headers) {
+      if (Object.hasOwnProperty.call(opt.headers, key)) {
+        xhr.setRequestHeader(key, opt.headers[key]);
       }
     }
-
     if (opt.abortId) {
       allXhr[opt.abortId] = xhr;
     }
@@ -259,6 +255,9 @@ export type InterceptorType = {
 };
 
 export type RequestExtendType = {
+  /** 公用 Header */
+  headers?: Record<string, unknown>;
+  withCredentials?: boolean;
   /** 拦截器配置 */
   interceptor?: InterceptorType;
   /** 请求前缀 */
@@ -268,5 +267,7 @@ export type RequestExtendType = {
 export function extend(opt: RequestExtendType) {
   request.prototype.interceptors = opt.interceptor;
   request.prototype.prefixUrl = opt.prefixUrl;
+  request.prototype.headers = opt.headers;
+  request.prototype.withCredentials = opt.withCredentials;
   return request;
 }
