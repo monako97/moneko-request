@@ -1,42 +1,14 @@
-export type Method =
-  | 'GET'
-  | 'DELETE'
-  | 'HEAD'
-  | 'OPTIONS'
-  | 'POST'
-  | 'PUT'
-  | 'PATCH'
-  | 'PURGE'
-  | 'LINK'
-  | 'UNLINK';
-
-export type RequestOption = {
-  responseType?: XMLHttpRequestResponseType;
-  method?: Method;
-  onProgress?(progress: ProgressEvent<XMLHttpRequestEventTarget>): void;
-  onAbort?(e: ProgressEvent<XMLHttpRequestEventTarget>): void;
-  withCredentials?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: { [key: string]: any } | BodyInit | false | Array<any>;
-  headers?: Record<string, string>;
-  showLoading?: boolean;
-  abortId?: string;
-};
-
-export interface ResponseBlob extends ResponseBody, Blob {
-  filename: string;
-}
-
+import {
+  ContentDispositionRegExp,
+  HttpRegExp,
+  type RequestOption,
+  type ResponseBody,
+} from './basic.js';
+export * from './basic.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export interface ResponseBody<T = any> extends Response {
-  status?: number;
-  success?: boolean;
-  message?: string;
-  result?: T;
-}
+type Any = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export interface ResponsePageData<T = any> extends ResponseBody<T> {
+export interface ResponsePageData<T = Any> extends ResponseBody<T> {
   /** 当前页码 */
   current: number;
   /** 分页大小 */
@@ -48,6 +20,29 @@ export interface ResponsePageData<T = any> extends ResponseBody<T> {
   /** 当前页数据 */
   data: T[];
 }
+export type InterceptorRequestType = RequestOption & {
+  url: string;
+};
+
+export type InterceptorType = {
+  /** 请求拦截器 */
+  request?(option: InterceptorRequestType): RequestOption | void;
+  /** 响应拦截器 */
+  response?(response: XMLHttpRequest['response'], xhr: XMLHttpRequest): void;
+  /** HTTP状态码错误 */
+  httpError?(xhr: XMLHttpRequest): void;
+};
+
+export type RequestExtendType = {
+  /** 公用 Header */
+  headers?: Record<string, unknown>;
+  withCredentials?: boolean;
+  /** 拦截器配置 */
+  interceptor?: InterceptorType;
+  /** 请求前缀 */
+  prefixUrl?: string;
+};
+
 const getXhr = (function () {
   let xhrConstructor;
 
@@ -70,6 +65,7 @@ const getXhr = (function () {
   return xhrConstructor as () => XMLHttpRequest;
 })();
 const allXhr: Record<string, XMLHttpRequest | null> = {};
+const globalExtendOptions: RequestExtendType = {};
 
 function responseHeadersToJson(headerString: string) {
   const headers: Record<string, string> = {};
@@ -82,13 +78,7 @@ function responseHeadersToJson(headerString: string) {
   }
   return headers;
 }
-const ContentDispositionRegExp = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-const HttpRegExp = /^(http(s|):\/\/)|^(\/\/)/;
 
-interface Response {
-  __xhr__?: XMLHttpRequest;
-  __headers__?: Record<string, string>;
-}
 function extraResp(resp: XMLHttpRequest['response'], xhr: XMLHttpRequest) {
   const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
   const headers = responseHeadersToJson(xhr.getAllResponseHeaders());
@@ -138,7 +128,7 @@ function isHttpSuccess(xhr: XMLHttpRequest): boolean {
 }
 function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) => void) {
   if (xhr.readyState === xhr.DONE) {
-    const interceptors = request.prototype.interceptors;
+    const interceptors = globalExtendOptions.interceptor;
     // 判断响应是否成功
     const isSuccess = isHttpSuccess(xhr);
 
@@ -171,16 +161,16 @@ const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
 
 export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
   return new Promise((reslove) => {
-    const interceptors = request.prototype.interceptors;
+    const interceptors = globalExtendOptions.interceptor;
     const method = opt.method?.toLocaleUpperCase() || 'GET';
     const isFormData: boolean = opt.data instanceof FormData;
-    const prefix = HttpRegExp.test(url) ? '' : request.prototype.prefixUrl || '';
+    const prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
     let uri = url;
 
     opt.headers = {
       'Content-Type': 'application/json; charset=utf-8',
       'X-Requested-With': 'XMLHttpRequest',
-      ...((request.prototype.headers as Record<string, string>) || {}),
+      ...((globalExtendOptions.headers as Record<string, string>) || {}),
       ...opt.headers,
     };
     const xhr = getXhr();
@@ -219,8 +209,8 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     xhr.open(method || 'GET', prefix + uri);
     if (opt.withCredentials !== void 0) {
       xhr.withCredentials = opt.withCredentials;
-    } else if (request.prototype.withCredentials !== void 0) {
-      xhr.withCredentials = request.prototype.withCredentials;
+    } else if (globalExtendOptions.withCredentials !== void 0) {
+      xhr.withCredentials = globalExtendOptions.withCredentials;
     }
     for (const key in opt.headers) {
       if (Object.hasOwnProperty.call(opt.headers, key)) {
@@ -234,40 +224,15 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
   });
 }
 
-export function cancelRequest(abortId: string) {
+export function cancelRequest(abortId: string): void {
   if (Object.prototype.hasOwnProperty.call(allXhr, abortId)) {
     allXhr[abortId]?.abort();
     allXhr[abortId] = null;
     delete allXhr[abortId];
   }
 }
-export type InterceptorRequestType = RequestOption & {
-  url: string;
-};
 
-export type InterceptorType = {
-  /** 请求拦截器 */
-  request?(option: InterceptorRequestType): RequestOption | void;
-  /** 响应拦截器 */
-  response?(response: XMLHttpRequest['response'], xhr: XMLHttpRequest): void;
-  /** HTTP状态码错误 */
-  httpError?(xhr: XMLHttpRequest): void;
-};
-
-export type RequestExtendType = {
-  /** 公用 Header */
-  headers?: Record<string, unknown>;
-  withCredentials?: boolean;
-  /** 拦截器配置 */
-  interceptor?: InterceptorType;
-  /** 请求前缀 */
-  prefixUrl?: string;
-};
-
-export function extend(opt: RequestExtendType) {
-  request.prototype.interceptors = opt.interceptor;
-  request.prototype.prefixUrl = opt.prefixUrl;
-  request.prototype.headers = opt.headers;
-  request.prototype.withCredentials = opt.withCredentials;
+export function extend(opt: RequestExtendType): typeof request {
+  Object.assign(globalExtendOptions, opt);
   return request;
 }

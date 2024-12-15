@@ -1,21 +1,38 @@
 {
   "name": "@moneko/request",
-  "version": "1.0.8",
-  "description": "request",
-  "main": "index.js",
-  "scripts": {
-    "build": "tsc && swc ./index.ts -o index.js"
+  "version": "1.1.0",
+  "description": "A lightweight and flexible request library for Node.js and browsers",
+  "main": "./lib/index.js",
+  "browser": "./lib/index.js",
+  "exports": {
+    ".": {
+      "node": "./lib/node.js",
+      "browser": "./lib/index.js",
+      "default": "./lib/index.js"
+    }
   },
-  "keywords": [],
+  "types": "./lib/index.d.ts",
+  "scripts": {
+    "build": "node ./build.mjs",
+    "lint": "eslint src"
+  },
+  "keywords": [
+    "request",
+    "http",
+    "browser",
+    "node",
+    "typescript"
+  ],
   "author": "moneko",
   "license": "MIT",
   "files": [
-    "index.js",
-    "index.d.ts"
+    "lib"
   ],
   "devDependencies": {
-    "@swc/cli": "^0.5.0",
-    "@swc/core": "^1.9.2",
-    "typescript": "^5.6.3"
+    "@swc/cli": "^0.5.2",
+    "@swc/core": "^1.10.1",
+    "@types/node": "^22.10.2",
+    "eslint-config-neko": "^3.0.2",
+    "typescript": "^5.7.2"
   }
 }
