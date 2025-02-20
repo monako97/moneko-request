@@ -132,10 +132,10 @@ function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) =
     // 判断响应是否成功
     const isSuccess = isHttpSuccess(xhr);
 
-    if (interceptors?.response) {
+    if (interceptors && interceptors.response) {
       interceptors.response(xhr.response, xhr);
     }
-    if (!isSuccess && interceptors?.httpError) {
+    if (!isSuccess && interceptors && interceptors.httpError) {
       interceptors.httpError(xhr);
     }
     if (opt.abortId && Object.prototype.hasOwnProperty.call(allXhr, opt.abortId)) {
@@ -162,25 +162,24 @@ const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
 export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
   return new Promise((reslove) => {
     const interceptors = globalExtendOptions.interceptor;
-    const method = opt.method?.toLocaleUpperCase() || 'GET';
+    const method = opt.method ? opt.method.toLocaleUpperCase() : 'GET';
     const isFormData: boolean = opt.data instanceof FormData;
     let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
     let uri = url;
 
-    opt.headers = {
-      'Content-Type': 'application/json; charset=utf-8',
-      'X-Requested-With': 'XMLHttpRequest',
-      ...((globalExtendOptions.headers as Record<string, string>) || {}),
-      ...opt.headers,
-    };
+    opt.headers = Object.assign(
+      {
+        'Content-Type': 'application/json; charset=utf-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      globalExtendOptions.headers || {},
+      opt.headers,
+    );
     const xhr = getXhr();
 
     xhr.responseType = opt.responseType || 'json';
     if (xhr.readyState === xhr.UNSENT && interceptors && interceptors.request) {
-      const nopt = interceptors.request({
-        url,
-        ...opt,
-      });
+      const nopt = interceptors.request(Object.assign({ url }, opt));
 
       if (nopt) {
         Object.assign(opt, nopt);
@@ -209,7 +208,7 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     if (opt.prefix) {
       prefix = opt.prefix;
     }
-    xhr.open(method || 'GET', (prefix + uri).replace(/\/+/g, '/'));
+    xhr.open(method || 'GET', `${prefix}${uri}`.replace(/\/+/g, '/'));
     if (opt.withCredentials !== void 0) {
       xhr.withCredentials = opt.withCredentials;
     } else if (globalExtendOptions.withCredentials !== void 0) {
@@ -228,8 +227,8 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
 }
 
 export function cancelRequest(abortId: string): void {
-  if (Object.prototype.hasOwnProperty.call(allXhr, abortId)) {
-    allXhr[abortId]?.abort();
+  if (Object.prototype.hasOwnProperty.call(allXhr, abortId) && allXhr[abortId]) {
+    allXhr[abortId].abort();
     allXhr[abortId] = null;
     delete allXhr[abortId];
   }

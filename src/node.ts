@@ -35,12 +35,12 @@ interface RequestOption extends Omit<BasicOption, 'headers' | 'onProgress'> {
   onProgress?(progress: number, total: number): void;
 }
 export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
-  const options = { ...globalExtendOptions, ...opt };
-  const { method = 'GET', headers, data, abortId, responseType = 'json' } = options;
+  const options = Object.assign({}, globalExtendOptions, opt);
+  const interceptors = globalExtendOptions.interceptor;
 
   // 拦截器
-  if (globalExtendOptions.interceptor?.request) {
-    const modifiedOptions = globalExtendOptions.interceptor.request({ ...options, url });
+  if (interceptors && interceptors.request) {
+    const modifiedOptions = interceptors.request(Object.assign({ url }, options));
 
     if (modifiedOptions) {
       Object.assign(options, modifiedOptions);
@@ -63,8 +63,8 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
         hostname: urlObj.hostname,
         port: urlObj.port || (isHttps ? 443 : 80),
         path: urlObj.pathname + urlObj.search,
-        method,
-        headers,
+        method: options.method || 'GET',
+        headers: options.headers,
       },
       (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
@@ -81,11 +81,14 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
         res.on('data', (chunk) => {
           progress += chunk.length;
           chunks.push(chunk);
-          options.onProgress?.(progress, total);
+          if (options.onProgress) {
+            options.onProgress(progress, total);
+          }
         });
         res.on('end', () => {
           const rawData = Buffer.concat(chunks);
           let parsedData: T;
+          const responseType = options.responseType === void 0 ? 'json' : options.responseType;
 
           try {
             switch (responseType) {
@@ -101,8 +104,8 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
           } catch (e) {
             return reject(e);
           }
-          if (globalExtendOptions.interceptor?.response) {
-            globalExtendOptions.interceptor.response(parsedData, res);
+          if (interceptors && interceptors.response) {
+            interceptors.response(parsedData, res);
           }
           resolve(parsedData as T);
         });
@@ -110,21 +113,21 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     );
 
     req.on('error', (err) => {
-      if (globalExtendOptions.interceptor?.httpError) {
-        globalExtendOptions.interceptor.httpError(err);
+      if (interceptors && interceptors.httpError) {
+        interceptors.httpError(err);
       }
       reject(err);
     });
 
-    if (abortId) {
+    if (options.abortId) {
       const controller = new AbortController();
 
-      abortControllers.set(abortId, controller);
+      abortControllers.set(options.abortId, controller);
       controller.signal.addEventListener('abort', () => req.destroy());
     }
 
-    if (data) {
-      req.write(typeof data === 'object' ? JSON.stringify(data) : data);
+    if (options.data) {
+      req.write(typeof options.data === 'object' ? JSON.stringify(options.data) : options.data);
     }
 
     req.end();
