@@ -43,3 +43,8 @@ export interface ResponseBody<T = Any> extends Response {
 }
 export const ContentDispositionRegExp: RegExp = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
 export const HttpRegExp: RegExp = /^(http(s|):\/\/)|^(\/\/)/;
+const UriSepRegExp: RegExp = /\/+/g;
+
+export function parseUrl(uri: string) {
+  return uri.replace(UriSepRegExp, '/');
+}

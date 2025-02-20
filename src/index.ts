@@ -1,6 +1,7 @@
 import {
   ContentDispositionRegExp,
   HttpRegExp,
+  parseUrl,
   type RequestOption,
   type ResponseBody,
 } from './basic.js';
@@ -40,7 +41,7 @@ export type RequestExtendType = {
   /** 拦截器配置 */
   interceptor?: InterceptorType;
   /** 请求前缀 */
-  prefixUrl?: string;
+  prefix?: string;
 };
 
 const getXhr = (function () {
@@ -164,7 +165,7 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     const interceptors = globalExtendOptions.interceptor;
     const method = opt.method ? opt.method.toLocaleUpperCase() : 'GET';
     const isFormData: boolean = opt.data instanceof FormData;
-    let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
+    let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
     let uri = url;
 
     opt.headers = Object.assign(
@@ -208,7 +209,7 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     if (opt.prefix) {
       prefix = opt.prefix;
     }
-    xhr.open(method || 'GET', `${prefix}${uri}`.replace(/\/+/g, '/'));
+    xhr.open(method || 'GET', parseUrl(`${prefix}/${uri}`));
     if (opt.withCredentials !== void 0) {
       xhr.withCredentials = opt.withCredentials;
     } else if (globalExtendOptions.withCredentials !== void 0) {

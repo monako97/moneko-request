@@ -2,7 +2,12 @@ import http, { type IncomingMessage, type OutgoingHttpHeaders } from 'http';
 import https from 'https';
 import { URL } from 'url';
 
-import { HttpRegExp, type RequestOption as BasicOption, type ResponseBody } from './basic.js';
+import {
+  HttpRegExp,
+  parseUrl,
+  type RequestOption as BasicOption,
+  type ResponseBody,
+} from './basic.js';
 
 const abortControllers = new Map<string, AbortController>();
 
@@ -25,7 +30,7 @@ export type HttpRequestExtendType = {
   /** 拦截器配置 */
   interceptor?: HttpInterceptorType;
   /** 请求前缀 */
-  prefixUrl?: string;
+  prefix?: string;
 };
 
 const globalExtendOptions: HttpRequestExtendType = {};
@@ -47,18 +52,19 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     }
   }
   // 添加请求前缀
-  let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
+  let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
 
   if (options.prefix) {
     prefix = options.prefix;
   }
-  const urlObj = new URL(`${prefix}${url}`.replace(/\/+/g, '/'));
+  const URI = parseUrl(`${prefix}/${url}`);
+  const urlObj = new URL(URI);
   const isHttps = urlObj.protocol === 'https:';
   const lib = isHttps ? https : http;
 
   return new Promise<T>((resolve, reject) => {
     const req = lib.request(
-      `${prefix}${url}`,
+      URI,
       {
         hostname: urlObj.hostname,
         port: urlObj.port || (isHttps ? 443 : 80),
