@@ -45,6 +45,6 @@ export const ContentDispositionRegExp: RegExp = /filename[^;=\n]*=((['"]).*?\2|[
 export const HttpRegExp: RegExp = /^(http(s|):\/\/)|^(\/\/)/;
 const UriSepRegExp: RegExp = /\/+/g;
 
-export function parseUrl(uri: string) {
+export function parseUrl(uri: string): string {
   return uri.replace(UriSepRegExp, '/');
 }
