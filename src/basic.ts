@@ -23,6 +23,7 @@ export type RequestOption = {
   headers?: Record<string, string>;
   showLoading?: boolean;
   abortId?: string;
+  prefix?: string;
 };
 
 interface Response {

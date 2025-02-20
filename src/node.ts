@@ -47,8 +47,12 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     }
   }
   // 添加请求前缀
-  const prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
-  const urlObj = new URL(`${prefix}${url}`);
+  let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
+
+  if (options.prefix) {
+    prefix = options.prefix;
+  }
+  const urlObj = new URL(`${prefix}${url}`.replace(/\/+/g, '/'));
   const isHttps = urlObj.protocol === 'https:';
   const lib = isHttps ? https : http;
 

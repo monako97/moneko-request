@@ -164,7 +164,7 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     const interceptors = globalExtendOptions.interceptor;
     const method = opt.method?.toLocaleUpperCase() || 'GET';
     const isFormData: boolean = opt.data instanceof FormData;
-    const prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
+    let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefixUrl || '';
     let uri = url;
 
     opt.headers = {
@@ -206,7 +206,10 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     if (opt.onAbort) {
       xhr.addEventListener('abort', opt.onAbort);
     }
-    xhr.open(method || 'GET', prefix + uri);
+    if (opt.prefix) {
+      prefix = opt.prefix;
+    }
+    xhr.open(method || 'GET', (prefix + uri).replace(/\/+/g, '/'));
     if (opt.withCredentials !== void 0) {
       xhr.withCredentials = opt.withCredentials;
     } else if (globalExtendOptions.withCredentials !== void 0) {
