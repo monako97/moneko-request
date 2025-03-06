@@ -24,6 +24,8 @@ export type RequestOption = {
   showLoading?: boolean;
   abortId?: string;
   prefix?: string;
+  /** 将参数放到 url */
+  paramsUrl?: boolean;
 };
 
 interface Response {

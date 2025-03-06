@@ -42,6 +42,7 @@ export type RequestExtendType = {
   interceptor?: InterceptorType;
   /** 请求前缀 */
   prefix?: string;
+  deteteIsParams?: boolean;
 };
 
 const getXhr = (function () {
@@ -188,14 +189,18 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     }
     if (isFormData) {
       delete opt.headers['Content-Type'];
+    } else if (
+      (globalExtendOptions.deteteIsParams && method === 'DELETE') ||
+      (method === 'GET' && opt.data && Object.keys(opt.data).length) ||
+      opt.paramsUrl
+    ) {
+      const params = new URLSearchParams(opt.data as Record<string, string>);
+
+      uri = `${url}?${params.toString()}`;
     } else if (stringifyData.includes(method)) {
       if (typeof opt.data !== 'string') {
         opt.data = JSON.stringify(opt.data);
       }
-    } else if (method === 'GET' && opt.data && Object.keys(opt.data).length) {
-      const params = new URLSearchParams(opt.data as Record<string, string>);
-
-      uri = `${url}?${params.toString()}`;
     }
     xhr.addEventListener('readystatechange', function () {
       onDone(xhr, opt, reslove);
