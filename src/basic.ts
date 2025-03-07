@@ -20,11 +20,13 @@ export type RequestOption = {
   onAbort?(e: ProgressEvent<XMLHttpRequestEventTarget>): void;
   withCredentials?: boolean;
   data?: { [key: string]: Any } | BodyInit | false | Array<Any>;
+  /** 放到 url 的 query 参数 */
+  params?: { [key: string]: Any } | BodyInit | false | Array<Any>;
   headers?: Record<string, string>;
   showLoading?: boolean;
   abortId?: string;
   prefix?: string;
-  /** 将参数放到 url */
+  /** 将 data 参数一同放到 url */
   paramsUrl?: boolean;
 };
 

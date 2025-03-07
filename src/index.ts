@@ -187,6 +187,12 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
         Object.assign(opt, nopt);
       }
     }
+
+    if (opt.params && Object.keys(opt.params).length) {
+      const params = new URLSearchParams(opt.params as Record<string, string>);
+
+      uri = `${url}?${params.toString()}`;
+    }
     if (isFormData) {
       delete opt.headers['Content-Type'];
     } else if (
