@@ -1,26 +1,12 @@
 import {
   ContentDispositionRegExp,
+  type GenericResponse,
   HttpRegExp,
   parseUrl,
   type RequestOption,
-  type ResponseBody,
 } from './basic.js';
 export * from './basic.js';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Any = any;
 
-export interface ResponsePageData<T = Any> extends ResponseBody<T> {
-  /** 当前页码 */
-  current: number;
-  /** 分页大小 */
-  pageSize: number;
-  /** 总共页数 */
-  totalPage: number;
-  /** 总共条数 */
-  total: number;
-  /** 当前页数据 */
-  data: T[];
-}
 export type InterceptorRequestType = RequestOption & {
   url: string;
 };
@@ -35,17 +21,25 @@ export type InterceptorType = {
 };
 
 export type RequestExtendType = {
-  /** 公用 Header */
+  /**
+   * 自定义请求头
+   */
   headers?: Record<string, unknown>;
+  /**
+   * 是否在请求中携带跨域凭据（如 Cookies）
+   * @default false
+   */
   withCredentials?: boolean;
   /** 拦截器配置 */
   interceptor?: InterceptorType;
-  /** 请求前缀 */
+  /**
+   * 请求的 URL 前缀
+   * 用于在基础 URL 之外追加额外的路径前缀
+   */
   prefix?: string;
-  deteteIsParams?: boolean;
 };
 
-const getXhr = (function () {
+const getXhr: () => XMLHttpRequest = (function () {
   let xhrConstructor;
 
   if (window.ActiveXObject) {
@@ -53,8 +47,7 @@ const getXhr = (function () {
       xhrConstructor = function () {
         return new window.ActiveXObject('Msxml2.XMLHTTP');
       };
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (err) {
+    } catch {
       xhrConstructor = function () {
         return new window.ActiveXObject('Microsoft.XMLHTTP');
       };
@@ -69,7 +62,7 @@ const getXhr = (function () {
 const allXhr: Record<string, XMLHttpRequest | null> = {};
 const globalExtendOptions: RequestExtendType = {};
 
-function responseHeadersToJson(headerString: string) {
+function responseHeadersToJson(headerString: string): Record<string, string> {
   const headers: Record<string, string> = {};
   const hl = headerString.split('\r\n');
 
@@ -81,7 +74,10 @@ function responseHeadersToJson(headerString: string) {
   return headers;
 }
 
-function extraResp(resp: XMLHttpRequest['response'], xhr: XMLHttpRequest) {
+function extraResp(
+  resp: XMLHttpRequest['response'],
+  xhr: XMLHttpRequest,
+): XMLHttpRequest['response'] {
   const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
   const headers = responseHeadersToJson(xhr.getAllResponseHeaders());
   const contentDisposition = headers['content-disposition'];
@@ -128,7 +124,7 @@ function isHttpSuccess(xhr: XMLHttpRequest): boolean {
       return false;
   }
 }
-function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) => void) {
+function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) => void): void {
   if (xhr.readyState === xhr.DONE) {
     const interceptors = globalExtendOptions.interceptor;
     // 判断响应是否成功
@@ -159,12 +155,11 @@ function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) =
     );
   }
 }
-const stringifyData = ['POST', 'PUT', 'DELETE', 'PATCH'];
 
-export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
+export function request<T = GenericResponse>(url: string, opt: RequestOption = {}): Promise<T> {
   return new Promise((reslove) => {
     const interceptors = globalExtendOptions.interceptor;
-    const method = opt.method ? opt.method.toLocaleUpperCase() : 'GET';
+    const method = opt.method ? opt.method.toLocaleUpperCase() : ('GET' as const);
     const isFormData: boolean = opt.data instanceof FormData;
     let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
     let uri = url;
@@ -187,7 +182,6 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
         Object.assign(opt, nopt);
       }
     }
-
     if (opt.params && Object.keys(opt.params).length) {
       const params = new URLSearchParams(opt.params as Record<string, string>);
 
@@ -195,18 +189,8 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
     }
     if (isFormData) {
       delete opt.headers['Content-Type'];
-    } else if (
-      (globalExtendOptions.deteteIsParams && method === 'DELETE') ||
-      (method === 'GET' && opt.data && Object.keys(opt.data).length) ||
-      opt.paramsUrl
-    ) {
-      const params = new URLSearchParams(opt.data as Record<string, string>);
-
-      uri = `${url}?${params.toString()}`;
-    } else if (stringifyData.includes(method)) {
-      if (typeof opt.data !== 'string') {
-        opt.data = JSON.stringify(opt.data);
-      }
+    } else if (opt.data !== null && !['undefined', 'string'].includes(typeof opt.data)) {
+      opt.data = JSON.stringify(opt.data);
     }
     xhr.addEventListener('readystatechange', function () {
       onDone(xhr, opt, reslove);

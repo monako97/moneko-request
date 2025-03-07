@@ -1,58 +1,53 @@
-import { swcDir } from '@swc/cli';
+import { convert } from '@moneko/convert';
+import { ESLint } from 'eslint';
 
-const swcOptions = {
+console.log('lint start');
+console.time('lint end');
+const eslint = new ESLint({
+  fix: true,
+});
+const results = await eslint.lintFiles('src');
+const formatter = await eslint.loadFormatter('stylish');
+const resultText = await formatter.format(results);
+
+process.stdout.write(resultText);
+await ESLint.outputFixes(results);
+
+console.timeEnd('lint end');
+const common = {
   jsc: {
     parser: {
       syntax: 'typescript',
-      tsx: false,
-      decorators: false,
+      decorators: true,
+      dynamicImport: true,
     },
-    target: 'es5',
+    target: 'esnext',
     loose: true,
     minify: {
-      compress: {
-        dead_code: true,
-        unused: true,
-        collapse_vars: true,
-      },
-      mangle: {
-        toplevel: false,
+      mangle: true,
+      compress: true,
+      format: {
+        comments: 'some'
       },
     },
     experimental: {
       emitIsolatedDts: true,
     },
   },
-  module: {
-    type: 'commonjs',
-    strict: true,
-    noInterop: false,
-  },
   minify: true,
-  isModule: true,
-};
-const callbacks = {
-  onSuccess(e) {
-    const list = [
-      '✨ 编译成功！🎉',
-      `⏱️  总耗时：${e.duration.toFixed(2)}ms`,
-      e.compiled && `📄 编译文件：${e.compiled}个`,
-      e.copied && `📋 复制文件：${e.copied}个`,
-    ]
-      .filter(Boolean)
-      .join('\n-  ');
-
-    console.log(list);
-  },
 };
 
-swcDir({
-  cliOptions: {
-    outDir: './lib',
-    filenames: ['./src'],
-    extensions: ['.ts'],
-    stripLeadingPaths: true,
+convert({
+  outDir: 'lib',
+  inputDir: 'src',
+  ignore: [/\.cts$/],
+  extensions: ['.mts', '.ts', '.js', '.mjs'],
+  options: {
+    ...common,
+    module: {
+      type: 'commonjs',
+    },
   },
-  swcOptions,
-  callbacks,
+}).then((result) => {
+  result.failed.map((msg) => process.stdout.write(msg));
 });

@@ -1,15 +1,16 @@
-import http, { type IncomingMessage, type OutgoingHttpHeaders } from 'http';
-import https from 'https';
-import { URL } from 'url';
+import http, { type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
+import https from 'node:https';
+import { URL } from 'node:url';
 
 import {
+  type GenericResponse,
   HttpRegExp,
   parseUrl,
   type RequestOption as BasicOption,
-  type ResponseBody,
 } from './basic.js';
+export * from './basic.js';
 
-const abortControllers = new Map<string, AbortController>();
+const abortControllers: Map<string, AbortController> = new Map();
 
 export type InterceptorRequestType = RequestOption & {
   url: string;
@@ -24,13 +25,22 @@ export type HttpInterceptorType = {
 };
 
 export type HttpRequestExtendType = {
-  /** 公用 Header */
-  headers?: OutgoingHttpHeaders;
+  /**
+   * 是否在请求中携带跨域凭据（如 Cookies）
+   * @default false
+   */
   withCredentials?: boolean;
+  /**
+   * 请求的 URL 前缀
+   * 用于在基础 URL 之外追加额外的路径前缀
+   */
+  prefix?: string;
+  /**
+   * 自定义请求头
+   */
+  headers?: OutgoingHttpHeaders;
   /** 拦截器配置 */
   interceptor?: HttpInterceptorType;
-  /** 请求前缀 */
-  prefix?: string;
 };
 
 const globalExtendOptions: HttpRequestExtendType = {};
@@ -39,9 +49,10 @@ interface RequestOption extends Omit<BasicOption, 'headers' | 'onProgress'> {
   headers?: OutgoingHttpHeaders;
   onProgress?(progress: number, total: number): void;
 }
-export function request<T = ResponseBody>(url: string, opt: RequestOption = {}): Promise<T> {
+export function request<T = GenericResponse>(url: string, opt: RequestOption = {}): Promise<T> {
   const options = Object.assign({}, globalExtendOptions, opt);
   const interceptors = globalExtendOptions.interceptor;
+  let uri = url;
 
   // 拦截器
   if (interceptors && interceptors.request) {
@@ -57,7 +68,13 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
   if (options.prefix) {
     prefix = options.prefix;
   }
-  const URI = parseUrl(`${prefix}/${url}`);
+
+  if (options.params && Object.keys(options.params).length) {
+    const params = new URLSearchParams(options.params as Record<string, string>);
+
+    uri = `${url}?${params.toString()}`;
+  }
+  const URI = parseUrl(`${prefix}/${uri}`);
   const urlObj = new URL(URI);
   const isHttps = urlObj.protocol === 'https:';
   const lib = isHttps ? https : http;
@@ -132,10 +149,9 @@ export function request<T = ResponseBody>(url: string, opt: RequestOption = {}):
       controller.signal.addEventListener('abort', () => req.destroy());
     }
 
-    if (options.data) {
+    if (options.data !== null && !['undefined', 'string'].includes(typeof options.data)) {
       req.write(typeof options.data === 'object' ? JSON.stringify(options.data) : options.data);
     }
-
     req.end();
   });
 }
