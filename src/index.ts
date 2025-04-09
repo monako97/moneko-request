@@ -204,7 +204,7 @@ export function request<T = GenericResponse>(url: string, opt: RequestOption = {
     if (opt.prefix) {
       prefix = opt.prefix;
     }
-    xhr.open(method || 'GET', parseUrl(`${prefix}/${uri}`));
+    xhr.open(method || 'GET', parseUrl([prefix, uri].filter(Boolean).join('/')));
     if (opt.withCredentials !== void 0) {
       xhr.withCredentials = opt.withCredentials;
     } else if (globalExtendOptions.withCredentials !== void 0) {

@@ -74,7 +74,7 @@ export function request<T = GenericResponse>(url: string, opt: RequestOption = {
 
     uri = `${url}?${params.toString()}`;
   }
-  const URI = parseUrl(`${prefix}/${uri}`);
+  const URI = parseUrl([prefix, uri].filter(Boolean).join('/'));
   const urlObj = new URL(URI);
   const isHttps = urlObj.protocol === 'https:';
   const lib = isHttps ? https : http;
