@@ -1,6 +1,6 @@
 {
   "name": "@moneko/request",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A lightweight and flexible request library for Node.js and browsers",
   "type": "module",
   "main": "./cjs/index.js",
@@ -8,7 +8,7 @@
   "browser": "./esm/index.js",
   "exports": {
     ".": {
-       "node": {
+      "node": {
         "import": "./esm/node.js",
         "require": "./cjs/node.js"
       },
