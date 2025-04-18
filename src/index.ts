@@ -222,7 +222,7 @@ export async function request<T = GenericResponse>(
     prefix = _prefix;
   }
   uri = parseUrl([prefix, uri].filter(Boolean).join('/'));
-  if (onProgress) {
+  if (onProgress || !('fetch' in self)) {
     return new Promise((reslove) => {
       // 使用 XHR
       const xhr = getXhr();
