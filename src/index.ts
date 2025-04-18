@@ -262,12 +262,12 @@ export async function request<T = GenericResponse>(
       const interceptors = globalExtendOptions.interceptor;
       // 判断响应是否成功
       const isSuccess = isHttpSuccess(res.status);
-      const [resp] = await Promise.all([
-        getResponse(res, responseType),
-        interceptors?.response?.(res, res),
+      const resp = await getResponse(res, responseType);
+
+      await Promise.all([
+        interceptors?.response?.(resp, res),
         !isSuccess && interceptors?.httpError?.(res),
       ]);
-
       return resp as T;
     })
     .catch((err) => {
