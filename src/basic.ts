@@ -48,7 +48,7 @@ export type Method =
 /**
  * 请求配置项。
  */
-export type RequestOption = {
+export interface RequestOption extends Omit<RequestInit, 'body' | 'signal'> {
   /**
    * 指定响应的数据类型
    * 可选值：`""`、`"arraybuffer"`、`"blob"`、`"document"`、`"json"`、`"text"`
@@ -72,19 +72,19 @@ export type RequestOption = {
   onAbort?(e: ProgressEvent<XMLHttpRequestEventTarget>): void;
   /**
    * 是否在请求中携带跨域凭据（如 Cookies）
-   * @default false
+   * @default "include"
    */
-  withCredentials?: boolean;
+  credentials?: RequestCredentials;
   /**
    * 作为请求体（body）发送的数据
    * 适用于 `POST`、`PUT`、`PATCH` 等方法
    */
-  data?: Any;
+  data?: BodyInit | null | Any;
   /**
    * 作为 URL 查询参数发送的数据。
    * 适用于 `GET`、`DELETE` 等方法，参数会被序列化到 URL 中
    */
-  params?: Any;
+  params?: string[][] | Record<string, string> | string | URLSearchParams;
   /**
    * 自定义请求头
    */
@@ -99,7 +99,7 @@ export type RequestOption = {
    * 用于在基础 URL 之外追加额外的路径前缀
    */
   prefix?: string;
-};
+}
 
 interface Response {
   __xhr__?: XMLHttpRequest;
@@ -146,4 +146,63 @@ const UriSepRegExp: RegExp = /\/+/g;
 
 export function parseUrl(uri: string): string {
   return uri.replace(UriSepRegExp, '/');
+}
+
+export async function getResponse(
+  res: globalThis.Response,
+  responseType: XMLHttpRequestResponseType,
+): Promise<Response | ArrayBuffer | string> {
+  let resp: Response | ArrayBuffer | string;
+
+  if (res.ok) {
+    switch (responseType) {
+      case 'json':
+        resp = await res.json();
+        break;
+      case 'blob': {
+        resp = (await res.blob()) as BlobResponse;
+        const contentDisposition = res.headers.get('content-disposition');
+
+        if (responseType === 'blob' && contentDisposition) {
+          const matches = ContentDispositionRegExp.exec(contentDisposition);
+
+          if (matches && matches[1]) {
+            resp.filename = decodeURIComponent(matches[1]).replace(/(^UTF-8|)['"]/g, '');
+          }
+        }
+        break;
+      }
+      case 'arraybuffer':
+        resp = await res.arrayBuffer();
+        break;
+      case 'text':
+      default:
+        resp = await res.text();
+        break;
+    }
+  } else {
+    resp = {
+      status: res.status,
+      message: res.statusText,
+      success: false,
+    };
+  }
+  const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
+
+  Object.defineProperty(protoWithExtras, '__xhr__', {
+    value: res,
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+  Object.defineProperty(protoWithExtras, '__headers__', {
+    value: res.headers,
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+  // 将 `resp` 的原型指向带有额外属性的 `protoWithExtras`
+  Object.setPrototypeOf(resp, protoWithExtras);
+
+  return resp;
 }
