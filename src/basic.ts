@@ -147,7 +147,30 @@ const UriSepRegExp: RegExp = /\/+/g;
 export function parseUrl(uri: string): string {
   return uri.replace(UriSepRegExp, '/');
 }
+export function withResponse<T>(
+  resp: T,
+  response: globalThis.Response | XMLHttpRequest,
+  headers: Headers | Record<string, string>,
+): Response {
+  const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
 
+  Object.defineProperty(protoWithExtras, '__xhr__', {
+    value: response,
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+  Object.defineProperty(protoWithExtras, '__headers__', {
+    value: headers,
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+  // 将 `resp` 的原型指向带有额外属性的 `protoWithExtras`
+  Object.setPrototypeOf(resp, protoWithExtras);
+
+  return resp as unknown as Response;
+}
 export async function getResponse(
   res: globalThis.Response,
   responseType: XMLHttpRequestResponseType,
@@ -187,22 +210,5 @@ export async function getResponse(
       success: false,
     };
   }
-  const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
-
-  Object.defineProperty(protoWithExtras, '__xhr__', {
-    value: res,
-    writable: false,
-    enumerable: false,
-    configurable: true,
-  });
-  Object.defineProperty(protoWithExtras, '__headers__', {
-    value: res.headers,
-    writable: false,
-    enumerable: false,
-    configurable: true,
-  });
-  // 将 `resp` 的原型指向带有额外属性的 `protoWithExtras`
-  Object.setPrototypeOf(resp, protoWithExtras);
-
-  return resp;
+  return withResponse(resp, res, res.headers);
 }
