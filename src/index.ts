@@ -1,11 +1,12 @@
 import {
   ContentDispositionRegExp,
   type GenericResponse,
+  getResponse,
   HttpRegExp,
   parseUrl,
   type RequestOption,
-} from './basic.js';
-export * from './basic.js';
+} from './basic';
+export * from './basic';
 
 export type InterceptorRequestType = RequestOption & {
   url: string;
@@ -13,11 +14,11 @@ export type InterceptorRequestType = RequestOption & {
 
 export type InterceptorType = {
   /** 请求拦截器 */
-  request?(option: InterceptorRequestType): RequestOption | void;
+  request?(option: InterceptorRequestType): Promise<RequestOption | void>;
   /** 响应拦截器 */
-  response?(response: XMLHttpRequest['response'], xhr: XMLHttpRequest): void;
+  response?(response: XMLHttpRequest['response'], xhr: XMLHttpRequest | Response): Promise<void>;
   /** HTTP状态码错误 */
-  httpError?(xhr: XMLHttpRequest): void;
+  httpError?(xhr: XMLHttpRequest | Response): Promise<void>;
 };
 
 export type RequestExtendType = {
@@ -27,9 +28,9 @@ export type RequestExtendType = {
   headers?: Record<string, unknown>;
   /**
    * 是否在请求中携带跨域凭据（如 Cookies）
-   * @default false
+   * @default "include"
    */
-  withCredentials?: boolean;
+  credentials?: RequestCredentials;
   /** 拦截器配置 */
   interceptor?: InterceptorType;
   /**
@@ -59,7 +60,7 @@ const getXhr: () => XMLHttpRequest = (function () {
   }
   return xhrConstructor as () => XMLHttpRequest;
 })();
-const allXhr: Record<string, XMLHttpRequest | null> = {};
+const allAbort: Record<string, XMLHttpRequest | AbortController | null> = {};
 const globalExtendOptions: RequestExtendType = {};
 
 function responseHeadersToJson(headerString: string): Record<string, string> {
@@ -74,7 +75,7 @@ function responseHeadersToJson(headerString: string): Record<string, string> {
   return headers;
 }
 
-function extraResp(
+function extraXhrResp(
   resp: XMLHttpRequest['response'],
   xhr: XMLHttpRequest,
 ): XMLHttpRequest['response'] {
@@ -105,17 +106,17 @@ function extraResp(
   Object.setPrototypeOf(resp, protoWithExtras);
   return resp;
 }
-function isHttpSuccess(xhr: XMLHttpRequest): boolean {
+function isHttpSuccess(status: number): boolean {
   // 0 状态可能是跨域或网络错误
-  if (xhr.status === 0) {
+  if (status === 0) {
     return false;
   }
   // 标准成功状态码
-  if (xhr.status >= 200 && xhr.status < 300) {
+  if (status >= 200 && status < 300) {
     return true;
   }
   // 特殊成功状态码
-  switch (xhr.status) {
+  switch (status) {
     case 304: // Not Modified (缓存)
       return true;
     case 1223: // IE特殊情况：将 204 转换为 1223
@@ -124,27 +125,29 @@ function isHttpSuccess(xhr: XMLHttpRequest): boolean {
       return false;
   }
 }
-function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) => void): void {
+async function onDone<T>(
+  xhr: XMLHttpRequest,
+  opt: RequestOption,
+  reslove: (resp: T) => void,
+): Promise<void> {
   if (xhr.readyState === xhr.DONE) {
+    if (opt.abortId && Object.prototype.hasOwnProperty.call(allAbort, opt.abortId)) {
+      allAbort[opt.abortId] = null;
+      delete allAbort[opt.abortId];
+    }
     const interceptors = globalExtendOptions.interceptor;
     // 判断响应是否成功
-    const isSuccess = isHttpSuccess(xhr);
+    const isSuccess = isHttpSuccess(xhr.status);
 
-    if (interceptors && interceptors.response) {
-      interceptors.response(xhr.response, xhr);
-    }
-    if (!isSuccess && interceptors && interceptors.httpError) {
-      interceptors.httpError(xhr);
-    }
-    if (opt.abortId && Object.prototype.hasOwnProperty.call(allXhr, opt.abortId)) {
-      allXhr[opt.abortId] = null;
-      delete allXhr[opt.abortId];
-    }
+    await Promise.all([
+      interceptors?.response?.(xhr.response, xhr),
+      !isSuccess && interceptors?.httpError?.(xhr),
+    ]);
     if (xhr.response) {
-      return reslove(extraResp(xhr.response, xhr));
+      return reslove(extraXhrResp(xhr.response, xhr));
     }
     return reslove(
-      extraResp(
+      extraXhrResp(
         {
           status: xhr.status,
           message: xhr.statusText,
@@ -156,77 +159,149 @@ function onDone<T>(xhr: XMLHttpRequest, opt: RequestOption, reslove: (resp: T) =
   }
 }
 
-export function request<T = GenericResponse>(url: string, opt: RequestOption = {}): Promise<T> {
-  return new Promise((reslove) => {
-    const interceptors = globalExtendOptions.interceptor;
-    const method = opt.method ? opt.method.toLocaleUpperCase() : ('GET' as const);
-    const isFormData: boolean = opt.data instanceof FormData;
-    let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
-    let uri = url;
+export async function request<T = GenericResponse>(
+  url: string,
+  opt: RequestOption = {},
+): Promise<T> {
+  const interceptors = globalExtendOptions.interceptor;
+  const method = opt.method ? opt.method.toLocaleUpperCase() : ('GET' as const);
+  const isFormData: boolean = opt.data instanceof FormData;
+  let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
+  let uri = url;
 
-    opt.headers = Object.assign(
-      {
-        'Content-Type': 'application/json; charset=utf-8',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-      globalExtendOptions.headers || {},
-      opt.headers,
-    );
-    const xhr = getXhr();
+  opt.headers = Object.assign(
+    {
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    globalExtendOptions.headers || {},
+    opt.headers,
+  );
+  if (interceptors && interceptors.request) {
+    const nopt = await interceptors.request(Object.assign({ url }, opt));
 
-    xhr.responseType = opt.responseType || 'json';
-    if (xhr.readyState === xhr.UNSENT && interceptors && interceptors.request) {
-      const nopt = interceptors.request(Object.assign({ url }, opt));
+    if (nopt) {
+      Object.assign(opt, nopt);
+    }
+  }
+  const compressedBody = opt.headers['Content-Encoding'] === 'gzip';
 
-      if (nopt) {
-        Object.assign(opt, nopt);
+  if (isFormData) {
+    delete opt.headers['Content-Type'];
+  } else if (
+    opt.data !== null &&
+    !['undefined', 'string'].includes(typeof opt.data) &&
+    !compressedBody
+  ) {
+    opt.data = JSON.stringify(opt.data);
+  }
+  if (compressedBody) {
+    const stream = new Blob([JSON.stringify(opt.data)], {
+      type: 'application/json',
+    })
+      .stream()
+      .pipeThrough(new CompressionStream('gzip'));
+
+    opt.data = await new Response(stream).blob();
+  }
+  const {
+    prefix: _prefix,
+    responseType = 'json',
+    onProgress,
+    onAbort,
+    abortId,
+    data,
+    params,
+    ...rest
+  } = opt;
+
+  if (params && Object.keys(params).length) {
+    uri = `${url}?${new URLSearchParams(params).toString()}`;
+  }
+  if (_prefix) {
+    prefix = _prefix;
+  }
+  uri = parseUrl([prefix, uri].filter(Boolean).join('/'));
+  if (onProgress) {
+    return new Promise((reslove) => {
+      // 使用 XHR
+      const xhr = getXhr();
+
+      xhr.responseType = responseType;
+      xhr.addEventListener('readystatechange', function () {
+        onDone(xhr, opt, reslove);
+      });
+      if (onProgress) {
+        xhr.addEventListener('progress', onProgress);
       }
-    }
-    if (opt.params && Object.keys(opt.params).length) {
-      const params = new URLSearchParams(opt.params as Record<string, string>);
-
-      uri = `${url}?${params.toString()}`;
-    }
-    if (isFormData) {
-      delete opt.headers['Content-Type'];
-    } else if (opt.data !== null && !['undefined', 'string'].includes(typeof opt.data)) {
-      opt.data = JSON.stringify(opt.data);
-    }
-    xhr.addEventListener('readystatechange', function () {
-      onDone(xhr, opt, reslove);
+      if (onAbort) {
+        xhr.addEventListener('abort', onAbort);
+      }
+      xhr.open(method, uri);
+      if (opt.credentials !== void 0) {
+        xhr.withCredentials = opt.credentials === 'include';
+      } else if (globalExtendOptions.credentials !== void 0) {
+        xhr.withCredentials = globalExtendOptions.credentials === 'include';
+      }
+      for (const key in opt.headers) {
+        if (Object.hasOwnProperty.call(opt.headers, key)) {
+          xhr.setRequestHeader(key, opt.headers[key]);
+        }
+      }
+      if (abortId) {
+        allAbort[abortId] = xhr;
+      }
+      xhr.send(data as XMLHttpRequestBodyInit);
     });
-    if (opt.onProgress) {
-      xhr.addEventListener('progress', opt.onProgress);
+  }
+  let signal: AbortSignal | undefined;
+
+  if (abortId) {
+    const controller = new AbortController();
+
+    allAbort[abortId] = controller;
+    signal = controller.signal;
+
+    if (onAbort) {
+      signal.onabort = onAbort as EventListener;
     }
-    if (opt.onAbort) {
-      xhr.addEventListener('abort', opt.onAbort);
-    }
-    if (opt.prefix) {
-      prefix = opt.prefix;
-    }
-    xhr.open(method || 'GET', parseUrl([prefix, uri].filter(Boolean).join('/')));
-    if (opt.withCredentials !== void 0) {
-      xhr.withCredentials = opt.withCredentials;
-    } else if (globalExtendOptions.withCredentials !== void 0) {
-      xhr.withCredentials = globalExtendOptions.withCredentials;
-    }
-    for (const key in opt.headers) {
-      if (Object.hasOwnProperty.call(opt.headers, key)) {
-        xhr.setRequestHeader(key, opt.headers[key]);
+  }
+  // 使用 Fetch
+  return fetch(uri, {
+    body: data,
+    signal: signal,
+    ...rest,
+  })
+    .then(async (res) => {
+      if (abortId && Object.prototype.hasOwnProperty.call(allAbort, abortId)) {
+        allAbort[abortId] = null;
+        delete allAbort[abortId];
       }
-    }
-    if (opt.abortId) {
-      allXhr[opt.abortId] = xhr;
-    }
-    xhr.send(opt.data as XMLHttpRequestBodyInit | Document);
-  });
+      const interceptors = globalExtendOptions.interceptor;
+      // 判断响应是否成功
+      const isSuccess = isHttpSuccess(res.status);
+      const [resp] = await Promise.all([
+        getResponse(res, responseType),
+        interceptors?.response?.(res, res),
+        !isSuccess && interceptors?.httpError?.(res),
+      ]);
+
+      return resp as T;
+    })
+    .catch((err) => {
+      return {
+        status: 500,
+        message: err.message,
+        success: false,
+      } as T;
+    });
 }
 
 export function cancelRequest(abortId: string): void {
-  if (Object.prototype.hasOwnProperty.call(allXhr, abortId) && allXhr[abortId]) {
-    allXhr[abortId].abort();
-    allXhr[abortId] = null;
-    delete allXhr[abortId];
+  if (Object.prototype.hasOwnProperty.call(allAbort, abortId) && allAbort[abortId]) {
+    allAbort[abortId].abort();
+    allAbort[abortId] = null;
+    delete allAbort[abortId];
   }
 }
 
