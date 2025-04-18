@@ -204,11 +204,20 @@ export async function getResponse(
         break;
     }
   } else {
-    resp = {
-      status: res.status,
-      message: res.statusText,
-      success: false,
-    };
+    try {
+      resp = {
+        status: res.status,
+        message: res.statusText,
+        success: false,
+        ...(await res.json()),
+      };
+    } catch {
+      resp = {
+        status: res.status,
+        message: res.statusText,
+        success: false,
+      };
+    }
   }
   return withResponse(resp, res, res.headers);
 }
