@@ -29,7 +29,7 @@ export type HttpRequestExtendType = {
    * 是否在请求中携带跨域凭据（如 Cookies）
    * @default false
    */
-  withCredentials?: boolean;
+  credentials?: boolean;
   /**
    * 请求的 URL 前缀
    * 用于在基础 URL 之外追加额外的路径前缀
@@ -148,7 +148,6 @@ export function request<T = GenericResponse>(url: string, opt: RequestOption = {
       abortControllers.set(options.abortId, controller);
       controller.signal.addEventListener('abort', () => req.destroy());
     }
-
     if (options.data !== null && !['undefined', 'string'].includes(typeof options.data)) {
       req.write(typeof options.data === 'object' ? JSON.stringify(options.data) : options.data);
     }
