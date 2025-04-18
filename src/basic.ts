@@ -51,7 +51,7 @@ export type Method =
 export interface RequestOption extends Omit<RequestInit, 'body' | 'signal'> {
   /**
    * 指定响应的数据类型
-   * 可选值：`""`、`"arraybuffer"`、`"blob"`、`"document"`、`"json"`、`"text"`
+   * 可选值：`"arraybuffer"`、`"blob"`、`"json"`、`"text"`
    * @default 'json'
    */
   responseType?: XMLHttpRequestResponseType;
@@ -88,7 +88,7 @@ export interface RequestOption extends Omit<RequestInit, 'body' | 'signal'> {
   /**
    * 自定义请求头
    */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | Headers;
   /**
    * 请求的唯一标识符，用于取消请求
    * 通过 `abortId` 关联的请求可以被中止
