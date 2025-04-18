@@ -27,9 +27,9 @@ export type HttpInterceptorType = {
 export type HttpRequestExtendType = {
   /**
    * 是否在请求中携带跨域凭据（如 Cookies）
-   * @default false
+   * @default "include"
    */
-  credentials?: boolean;
+  credentials?: RequestCredentials;
   /**
    * 请求的 URL 前缀
    * 用于在基础 URL 之外追加额外的路径前缀
