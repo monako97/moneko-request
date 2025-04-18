@@ -5,6 +5,7 @@ import {
   HttpRegExp,
   parseUrl,
   type RequestOption,
+  withResponse,
 } from './basic';
 export * from './basic';
 
@@ -79,7 +80,6 @@ function extraXhrResp(
   resp: XMLHttpRequest['response'],
   xhr: XMLHttpRequest,
 ): XMLHttpRequest['response'] {
-  const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
   const headers = responseHeadersToJson(xhr.getAllResponseHeaders());
   const contentDisposition = headers['content-disposition'];
 
@@ -90,21 +90,7 @@ function extraXhrResp(
       resp.filename = decodeURIComponent(matches[1]).replace(/(^UTF-8|)['"]/g, '');
     }
   }
-  Object.defineProperty(protoWithExtras, '__xhr__', {
-    value: xhr,
-    writable: false,
-    enumerable: false,
-    configurable: true,
-  });
-  Object.defineProperty(protoWithExtras, '__headers__', {
-    value: headers,
-    writable: false,
-    enumerable: false,
-    configurable: true,
-  });
-  // 将 `resp` 的原型指向带有额外属性的 `protoWithExtras`
-  Object.setPrototypeOf(resp, protoWithExtras);
-  return resp;
+  return withResponse(resp, xhr, headers);
 }
 function isHttpSuccess(status: number): boolean {
   // 0 状态可能是跨域或网络错误
