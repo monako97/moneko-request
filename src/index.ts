@@ -60,7 +60,7 @@ const getXhr: () => XMLHttpRequest = (function () {
   }
   return xhrConstructor as () => XMLHttpRequest;
 })();
-const allAbort: Record<string, XMLHttpRequest | AbortController | null> = {};
+const abortControllers: Map<string, XMLHttpRequest | AbortController> = new Map();
 const globalExtendOptions: RequestExtendType = {};
 
 function responseHeadersToJson(headerString: string): Record<string, string> {
@@ -131,9 +131,8 @@ async function onDone<T>(
   reslove: (resp: T) => void,
 ): Promise<void> {
   if (xhr.readyState === xhr.DONE) {
-    if (opt.abortId && Object.prototype.hasOwnProperty.call(allAbort, opt.abortId)) {
-      allAbort[opt.abortId] = null;
-      delete allAbort[opt.abortId];
+    if (opt.abortId && abortControllers.has(opt.abortId)) {
+      abortControllers.delete(opt.abortId);
     }
     const interceptors = globalExtendOptions.interceptor;
     // 判断响应是否成功
@@ -249,7 +248,7 @@ export async function request<T = GenericResponse>(
         }
       }
       if (abortId) {
-        allAbort[abortId] = xhr;
+        abortControllers.set(abortId, xhr);
       }
       xhr.send(data as XMLHttpRequestBodyInit);
     });
@@ -259,9 +258,8 @@ export async function request<T = GenericResponse>(
   if (abortId) {
     const controller = new AbortController();
 
-    allAbort[abortId] = controller;
+    abortControllers.set(abortId, controller);
     signal = controller.signal;
-
     if (onAbort) {
       signal.onabort = onAbort as EventListener;
     }
@@ -273,9 +271,8 @@ export async function request<T = GenericResponse>(
     ...rest,
   })
     .then(async (res) => {
-      if (abortId && Object.prototype.hasOwnProperty.call(allAbort, abortId)) {
-        allAbort[abortId] = null;
-        delete allAbort[abortId];
+      if (abortId && abortControllers.has(abortId)) {
+        abortControllers.delete(abortId);
       }
       const interceptors = globalExtendOptions.interceptor;
       // 判断响应是否成功
@@ -298,10 +295,11 @@ export async function request<T = GenericResponse>(
 }
 
 export function cancelRequest(abortId: string): void {
-  if (Object.prototype.hasOwnProperty.call(allAbort, abortId) && allAbort[abortId]) {
-    allAbort[abortId].abort();
-    allAbort[abortId] = null;
-    delete allAbort[abortId];
+  const controller = abortControllers.get(abortId);
+
+  if (controller) {
+    controller.abort();
+    abortControllers.delete(abortId);
   }
 }
 
