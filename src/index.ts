@@ -6,8 +6,8 @@ import {
   parseUrl,
   type RequestOption,
   withResponse,
-} from './basic.js';
-export * from './basic.js';
+} from './basic';
+export * from './basic';
 
 export type InterceptorRequestType = RequestOption & {
   url: string;
@@ -150,9 +150,12 @@ export async function request<T = GenericResponse>(
 ): Promise<T> {
   const interceptors = globalExtendOptions.interceptor;
   const method = opt.method ? opt.method.toLocaleUpperCase() : ('GET' as const);
-  const isFormData: boolean = opt.data instanceof FormData;
   let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
   let uri = url;
+
+  if (opt.headers instanceof Headers) {
+    opt.headers = Object.fromEntries(opt.headers);
+  }
 
   opt.headers = Object.assign(
     {
@@ -171,23 +174,19 @@ export async function request<T = GenericResponse>(
   }
   const compressedBody = opt.headers['Content-Encoding'] === 'gzip';
 
-  if (isFormData) {
+  if (opt.data instanceof FormData) {
     delete opt.headers['Content-Type'];
-  } else if (
-    opt.data !== null &&
-    !['undefined', 'string'].includes(typeof opt.data) &&
-    !compressedBody
-  ) {
+  } else if (opt.data !== null && !['undefined', 'string'].includes(typeof opt.data)) {
     opt.data = JSON.stringify(opt.data);
   }
   if (compressedBody) {
-    const stream = new Blob([JSON.stringify(opt.data)], {
-      type: 'application/json',
-    })
-      .stream()
-      .pipeThrough(new CompressionStream('gzip'));
-
-    opt.data = await new Response(stream).blob();
+    opt.data = await new Response(
+      new Blob([opt.data], {
+        type: opt.headers['Content-Type'],
+      })
+        .stream()
+        .pipeThrough(new CompressionStream('gzip')),
+    ).blob();
   }
   const {
     prefix: _prefix,
@@ -230,7 +229,7 @@ export async function request<T = GenericResponse>(
       }
       for (const key in opt.headers) {
         if (Object.hasOwnProperty.call(opt.headers, key)) {
-          xhr.setRequestHeader(key, opt.headers[key]);
+          xhr.setRequestHeader(key, (opt.headers as Record<string, string>)[key]);
         }
       }
       if (abortId) {
