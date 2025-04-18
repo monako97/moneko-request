@@ -6,8 +6,8 @@ import {
   parseUrl,
   type RequestOption,
   withResponse,
-} from './basic';
-export * from './basic';
+} from './basic.js';
+export * from './basic.js';
 
 export type InterceptorRequestType = RequestOption & {
   url: string;
