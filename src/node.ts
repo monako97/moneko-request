@@ -62,8 +62,9 @@ export function request<T = GenericResponse>(url: string, opt: RequestOption = {
       Object.assign(options, modifiedOptions);
     }
   }
+  const isHttpUlr = HttpRegExp.test(url);
   // 添加请求前缀
-  let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
+  let prefix = isHttpUlr ? '' : globalExtendOptions.prefix || '';
 
   if (options.prefix) {
     prefix = options.prefix;
@@ -74,7 +75,7 @@ export function request<T = GenericResponse>(url: string, opt: RequestOption = {
 
     uri = `${url}?${params.toString()}`;
   }
-  const URI = parseUrl([prefix, uri].filter(Boolean).join('/'));
+  const URI = isHttpUlr ? url : parseUrl([prefix, uri].filter(Boolean).join('/'));
   const urlObj = new URL(URI);
   const isHttps = urlObj.protocol === 'https:';
   const lib = isHttps ? https : http;

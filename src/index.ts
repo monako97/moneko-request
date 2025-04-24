@@ -44,17 +44,17 @@ export type RequestExtendType = {
 const getXhr: () => XMLHttpRequest = (function () {
   let xhrConstructor;
 
-  if (window.ActiveXObject) {
+  if (self.ActiveXObject) {
     try {
       xhrConstructor = function () {
-        return new window.ActiveXObject('Msxml2.XMLHTTP');
+        return new self.ActiveXObject('Msxml2.XMLHTTP');
       };
     } catch {
       xhrConstructor = function () {
-        return new window.ActiveXObject('Microsoft.XMLHTTP');
+        return new self.ActiveXObject('Microsoft.XMLHTTP');
       };
     }
-  } else if (window.XMLHttpRequest) {
+  } else if (self.XMLHttpRequest) {
     xhrConstructor = function () {
       return new XMLHttpRequest();
     };
@@ -150,7 +150,8 @@ export async function request<T = GenericResponse>(
 ): Promise<T> {
   const interceptors = globalExtendOptions.interceptor;
   const method = opt.method ? opt.method.toLocaleUpperCase() : ('GET' as const);
-  let prefix = HttpRegExp.test(url) ? '' : globalExtendOptions.prefix || '';
+  const isHttpUlr = HttpRegExp.test(url);
+  let prefix = isHttpUlr ? '' : globalExtendOptions.prefix || '';
   let uri = url;
 
   if (opt.headers instanceof Headers) {
@@ -205,7 +206,7 @@ export async function request<T = GenericResponse>(
   if (_prefix) {
     prefix = _prefix;
   }
-  uri = parseUrl([prefix, uri].filter(Boolean).join('/'));
+  uri = isHttpUlr ? url : parseUrl([prefix, uri].filter(Boolean).join('/'));
   if (onProgress || !('fetch' in self)) {
     return new Promise((reslove) => {
       // 使用 XHR
