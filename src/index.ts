@@ -26,19 +26,19 @@ export type RequestExtendType = {
   /**
    * 自定义请求头
    */
-  headers?: Record<string, unknown>;
+  headers?: RequestOption['headers'];
   /**
    * 是否在请求中携带跨域凭据（如 Cookies）
    * @default "include"
    */
-  credentials?: RequestCredentials;
+  credentials?: RequestOption['credentials'];
   /** 拦截器配置 */
   interceptor?: InterceptorType;
   /**
    * 请求的 URL 前缀
    * 用于在基础 URL 之外追加额外的路径前缀
    */
-  prefix?: string;
+  prefix?: RequestOption['prefix'];
 };
 
 const getXhr: () => XMLHttpRequest = (function () {
