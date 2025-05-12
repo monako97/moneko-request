@@ -45,16 +45,95 @@ export type Method =
   /** 回显接收到的请求，通常用于诊断和调试 */
   | 'TRACE';
 
+type ResponseType =
+  | ''
+  | 'arraybuffer'
+  | 'blob'
+  | 'document'
+  | 'json'
+  | 'text'
+  | 'form-data'
+  | 'bytes';
+
+export interface Dict<T> {
+  [key: string]: T | undefined;
+}
+export interface IncomingHeaders extends Dict<string | string[]> {
+  accept?: string | undefined;
+  'accept-encoding'?: string | undefined;
+  'accept-language'?: string | undefined;
+  'accept-patch'?: string | undefined;
+  'accept-ranges'?: string | undefined;
+  'access-control-allow-credentials'?: string | undefined;
+  'access-control-allow-headers'?: string | undefined;
+  'access-control-allow-methods'?: string | undefined;
+  'access-control-allow-origin'?: string | undefined;
+  'access-control-expose-headers'?: string | undefined;
+  'access-control-max-age'?: string | undefined;
+  'access-control-request-headers'?: string | undefined;
+  'access-control-request-method'?: string | undefined;
+  age?: string | undefined;
+  allow?: string | undefined;
+  'alt-svc'?: string | undefined;
+  authorization?: string | undefined;
+  'cache-control'?: string | undefined;
+  connection?: string | undefined;
+  'content-disposition'?: string | undefined;
+  'content-encoding'?: string | undefined;
+  'content-language'?: string | undefined;
+  'content-length'?: string | undefined;
+  'content-location'?: string | undefined;
+  'content-range'?: string | undefined;
+  'content-type'?: string | undefined;
+  cookie?: string | undefined;
+  date?: string | undefined;
+  etag?: string | undefined;
+  expect?: string | undefined;
+  expires?: string | undefined;
+  forwarded?: string | undefined;
+  from?: string | undefined;
+  host?: string | undefined;
+  'if-match'?: string | undefined;
+  'if-modified-since'?: string | undefined;
+  'if-none-match'?: string | undefined;
+  'if-unmodified-since'?: string | undefined;
+  'last-modified'?: string | undefined;
+  location?: string | undefined;
+  origin?: string | undefined;
+  pragma?: string | undefined;
+  'proxy-authenticate'?: string | undefined;
+  'proxy-authorization'?: string | undefined;
+  'public-key-pins'?: string | undefined;
+  range?: string | undefined;
+  referer?: string | undefined;
+  'retry-after'?: string | undefined;
+  'sec-websocket-accept'?: string | undefined;
+  'sec-websocket-extensions'?: string | undefined;
+  'sec-websocket-key'?: string | undefined;
+  'sec-websocket-protocol'?: string | undefined;
+  'sec-websocket-version'?: string | undefined;
+  'set-cookie'?: string[] | undefined;
+  'strict-transport-security'?: string | undefined;
+  tk?: string | undefined;
+  trailer?: string | undefined;
+  'transfer-encoding'?: string | undefined;
+  upgrade?: string | undefined;
+  'user-agent'?: string | undefined;
+  vary?: string | undefined;
+  via?: string | undefined;
+  warning?: string | undefined;
+  'www-authenticate'?: string | undefined;
+}
 /**
  * 请求配置项。
  */
-export interface RequestOption extends Omit<RequestInit, 'body' | 'signal'> {
+export interface RequestOption extends Omit<RequestInit, 'body' | 'signal' | 'headers'> {
   /**
    * 指定响应的数据类型
-   * 可选值：`"arraybuffer"`、`"blob"`、`"json"`、`"text"`
+   * 可选值：`"arraybuffer"`、`"blob"`、`"json"`、`"text"`、`"form-data"`
    * @default 'json'
    */
-  responseType?: XMLHttpRequestResponseType;
+  responseType?: ResponseType;
   /**
    * 请求的 HTTP 方法
    * @default 'GET'
@@ -84,11 +163,18 @@ export interface RequestOption extends Omit<RequestInit, 'body' | 'signal'> {
    * 作为 URL 查询参数发送的数据。
    * 适用于 `GET`、`DELETE` 等方法，参数会被序列化到 URL 中
    */
-  params?: string[][] | Record<string, string> | string | URLSearchParams;
+  params?: string | string[][] | Dict<string | number | boolean> | URLSearchParams;
   /**
    * 自定义请求头
+   * @example
+   * request('/update', {
+   *   headers: {
+   *     'content-encoding': 'gzip', // 将提交的数据以 Gzip 压缩
+   *   },
+   *   data: { xxxxx: 'data' }
+   * });
    */
-  headers?: Record<string, string> | Headers;
+  headers?: HeadersInit & IncomingHeaders;
   /**
    * 请求的唯一标识符，用于取消请求
    * 通过 `abortId` 关联的请求可以被中止
@@ -99,12 +185,26 @@ export interface RequestOption extends Omit<RequestInit, 'body' | 'signal'> {
    * 用于在基础 URL 之外追加额外的路径前缀
    */
   prefix?: string;
+  /**
+   * 压缩提交数据上传的格式
+   * @description 需先指定压缩算法;
+   * @default 'blob'
+   * @example
+   * request('/upload-file', {
+   *   headers: {
+   *     'content-encoding': 'gzip',
+   *   },
+   *   compressedType: 'bytes',
+   *   data: { xxxxx: 'data' }
+   * });
+   */
+  compressedType?: Omit<ResponseType, '' | 'document'>;
 }
 
 interface Response {
   __xhr__?: XMLHttpRequest;
-  __headers__?: Record<string, string>;
-  [key: string]: unknown;
+  __headers__?: RequestOption['headers'];
+  [key: string]: Any;
 }
 
 /** 通用响应结构 */
@@ -150,7 +250,7 @@ export function parseUrl(uri: string): string {
 export function withResponse<T>(
   resp: T,
   response: globalThis.Response | XMLHttpRequest,
-  headers: Headers | Record<string, string>,
+  headers: RequestOption['headers']
 ): Response {
   const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
 
@@ -173,20 +273,29 @@ export function withResponse<T>(
 }
 export async function getResponse(
   res: globalThis.Response,
-  responseType: XMLHttpRequestResponseType,
-): Promise<Response | ArrayBuffer | string> {
-  let resp: Response | ArrayBuffer | string;
+  responseType: RequestOption['responseType']
+): Promise<globalThis.Response | Response | ArrayBuffer | string | FormData | Uint8Array> {
+  let resp: globalThis.Response | Response | ArrayBuffer | string | FormData | Uint8Array;
 
   if (res.ok) {
     switch (responseType) {
-      case 'json':
-        resp = await res.json();
+      case '':
+        resp = res;
+        break;
+      case 'form-data':
+        resp = await res.formData();
+        break;
+      case 'arraybuffer':
+        resp = await res.arrayBuffer();
+        break;
+      case 'bytes':
+        resp = await res.bytes();
         break;
       case 'blob': {
         resp = (await res.blob()) as BlobResponse;
         const contentDisposition = res.headers.get('content-disposition');
 
-        if (responseType === 'blob' && contentDisposition) {
+        if (contentDisposition) {
           const matches = ContentDispositionRegExp.exec(contentDisposition);
 
           if (matches && matches[1]) {
@@ -195,10 +304,11 @@ export async function getResponse(
         }
         break;
       }
-      case 'arraybuffer':
-        resp = await res.arrayBuffer();
+      case 'json':
+        resp = await res.json();
         break;
       case 'text':
+      case 'document':
       default:
         resp = await res.text();
         break;
@@ -219,5 +329,5 @@ export async function getResponse(
       };
     }
   }
-  return withResponse(resp, res, res.headers);
+  return withResponse(resp, res, res.headers as RequestOption['headers']);
 }

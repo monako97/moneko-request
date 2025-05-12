@@ -5,6 +5,7 @@ import { URL } from 'node:url';
 import {
   type GenericResponse,
   HttpRegExp,
+  type IncomingHeaders,
   parseUrl,
   type RequestOption as BasicOption,
 } from './basic.js';
@@ -12,41 +13,40 @@ export * from './basic.js';
 
 const abortControllers: Map<string, AbortController> = new Map();
 
-export type InterceptorRequestType = RequestOption & {
+export interface InterceptorRequestType extends RequestOption {
   url: string;
-};
-export type HttpInterceptorType = {
+}
+export interface HttpInterceptorType {
   /** 请求拦截器 */
   request?(option: InterceptorRequestType): RequestOption | void;
   /** 响应拦截器 */
   response?(response: XMLHttpRequest['response'], xhr: IncomingMessage): void;
   /** HTTP状态错误 */
   httpError?(err: Error): void;
-};
+}
 
-export type HttpRequestExtendType = {
+export interface HttpRequestExtendType {
   /**
    * 是否在请求中携带跨域凭据（如 Cookies）
    * @default "include"
    */
-  credentials?: RequestCredentials;
+  credentials?: RequestOption['credentials'];
   /**
    * 请求的 URL 前缀
    * 用于在基础 URL 之外追加额外的路径前缀
    */
-  prefix?: string;
+  prefix?: RequestOption['prefix'];
   /**
    * 自定义请求头
    */
-  headers?: OutgoingHttpHeaders;
+  headers?: RequestOption['headers'];
   /** 拦截器配置 */
   interceptor?: HttpInterceptorType;
-};
+}
 
 const globalExtendOptions: HttpRequestExtendType = {};
 
-interface RequestOption extends Omit<BasicOption, 'headers' | 'onProgress'> {
-  headers?: OutgoingHttpHeaders;
+interface RequestOption extends Omit<BasicOption, 'onProgress'> {
   onProgress?(progress: number, total: number): void;
 }
 export function request<T = GenericResponse>(url: string, opt: RequestOption = {}): Promise<T> {
@@ -70,7 +70,10 @@ export function request<T = GenericResponse>(url: string, opt: RequestOption = {
     prefix = options.prefix;
   }
 
-  if (options.params && Object.keys(options.params).length) {
+  if (
+    options.params &&
+    (Object.keys(options.params).length || options.params instanceof URLSearchParams)
+  ) {
     const params = new URLSearchParams(options.params as Record<string, string>);
 
     uri = `${url}?${params.toString()}`;

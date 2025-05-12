@@ -173,21 +173,48 @@ export async function request<T = GenericResponse>(
       Object.assign(opt, nopt);
     }
   }
-  const compressedBody = opt.headers['Content-Encoding'] === 'gzip';
 
   if (opt.data instanceof FormData) {
     delete opt.headers['Content-Type'];
+    delete opt.headers['content-type'];
   } else if (opt.data !== null && !['undefined', 'string'].includes(typeof opt.data)) {
     opt.data = JSON.stringify(opt.data);
   }
-  if (compressedBody) {
-    opt.data = await new Response(
+  const compressed = (opt.headers['content-encoding'] ||
+    opt.headers['Content-Encoding']) as CompressionFormat;
+
+  if (compressed) {
+    const compressedBody = new Response(
       new Blob([opt.data], {
-        type: opt.headers['Content-Type'],
+        type: (opt.headers['content-type'] || opt.headers['Content-Type']) as string,
       })
         .stream()
-        .pipeThrough(new CompressionStream('gzip')),
-    ).blob();
+        .pipeThrough(new CompressionStream(compressed)),
+    );
+    const compressedType = opt.compressedType;
+
+    switch (compressedType) {
+      case 'bytes':
+        opt.data = await compressedBody.bytes();
+        break;
+      case 'arraybuffer':
+        opt.data = await compressedBody.arrayBuffer();
+        break;
+      case 'form-data':
+        opt.data = await compressedBody.formData();
+        break;
+      case 'json':
+        opt.data = await compressedBody.json();
+        break;
+      case 'text':
+        opt.data = await compressedBody.text();
+        break;
+      case 'blob':
+      default:
+        opt.data = await compressedBody.blob();
+        break;
+    }
+    delete opt.compressedType;
   }
   const {
     prefix: _prefix,
@@ -200,8 +227,8 @@ export async function request<T = GenericResponse>(
     ...rest
   } = opt;
 
-  if (params && Object.keys(params).length) {
-    uri = `${url}?${new URLSearchParams(params).toString()}`;
+  if (params && (Object.keys(params).length || params instanceof URLSearchParams)) {
+    uri = `${url}?${new URLSearchParams(params as URLSearchParams).toString()}`;
   }
   if (_prefix) {
     prefix = _prefix;
@@ -212,7 +239,7 @@ export async function request<T = GenericResponse>(
       // 使用 XHR
       const xhr = getXhr();
 
-      xhr.responseType = responseType;
+      xhr.responseType = responseType as XMLHttpRequestResponseType;
       xhr.addEventListener('readystatechange', function () {
         onDone(xhr, opt, reslove);
       });
