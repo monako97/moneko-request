@@ -1,11 +1,10 @@
-import http, { type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
+import http, { type IncomingMessage } from 'node:http';
 import https from 'node:https';
 import { URL } from 'node:url';
 
 import {
   type GenericResponse,
   HttpRegExp,
-  type IncomingHeaders,
   parseUrl,
   type RequestOption as BasicOption,
 } from './basic.js';

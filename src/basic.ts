@@ -250,7 +250,7 @@ export function parseUrl(uri: string): string {
 export function withResponse<T>(
   resp: T,
   response: globalThis.Response | XMLHttpRequest,
-  headers: RequestOption['headers']
+  headers: RequestOption['headers'],
 ): Response {
   const protoWithExtras = Object.create(Object.getPrototypeOf(resp));
 
@@ -273,7 +273,7 @@ export function withResponse<T>(
 }
 export async function getResponse(
   res: globalThis.Response,
-  responseType: RequestOption['responseType']
+  responseType: RequestOption['responseType'],
 ): Promise<globalThis.Response | Response | ArrayBuffer | string | FormData | Uint8Array> {
   let resp: globalThis.Response | Response | ArrayBuffer | string | FormData | Uint8Array;
 
